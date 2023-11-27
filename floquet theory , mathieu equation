@@ -1,0 +1,85 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import cmasher as cmr
+from scipy.integrate import solve_ivp
+
+m_phi = 1.0
+M = 1.0
+
+def dilaton(t):
+    return phi_0 * np.cos(m_phi * t)
+
+def dilaton_derivative(t):
+    return -phi_0 * m_phi * np.sin(m_phi * t)
+
+def dilaton_double_derivative(t):
+    return -phi_0 * m_phi**2 * np.cos(m_phi * t)
+
+def floquet_rhs_1(t, X, k, m_gamma_prime):
+    A0, dA0 = X
+    phi_bar = dilaton(t)
+    
+    d2A0 = -(k**2 + (m_gamma_prime**2) / np.exp(phi_bar / M)) * A0
+    
+    return [dA0, d2A0]
+
+def floquet_rhs_2(t, X, k, m_gamma_prime):
+    A0, dA0 = X
+    phi_bar = dilaton(t)
+    dphi_bar = dilaton_derivative(t)
+    ddphi_bar = dilaton_double_derivative(t)
+    
+    d2A0 = -(k**2 + (m_gamma_prime**2) / np.exp(phi_bar / M) - (ddphi_bar / (2 * M)) - (dphi_bar / (2 * M))**2) * A0
+    
+    return [dA0, d2A0]
+
+phi0_values = np.linspace(0.01, 6, 400)
+k_values = np.linspace(0.01, 3, 400)
+
+m_gamma_prime_values = [ 8 * m_phi, 12 * m_phi]
+
+fig, axs = plt.subplots(len(m_gamma_prime_values), 2, figsize=(12, 6 * len(m_gamma_prime_values)))
+
+for idx, m_gamma_prime in enumerate(m_gamma_prime_values):
+    Re_mu_grid_1 = np.zeros((len(phi0_values), len(k_values)))
+    Re_mu_grid_2 = np.zeros((len(phi0_values), len(k_values)))
+
+    T = 2 * np.pi / m_phi
+    t_eval = np.linspace(0, 10 * T, 1000)
+
+    for i, phi_0 in enumerate(phi0_values):
+        for j, k in enumerate(k_values):
+            initial_conditions = [1.0, 0.0]
+
+            sol_1 = solve_ivp(floquet_rhs_1, (0, 10 * T), initial_conditions, args=(k, m_gamma_prime), t_eval=t_eval, method='RK45')
+            final_A0_1 = sol_1.y[0][-1]
+            Re_mu_1 = (1 / (10 * T)) * np.log(np.abs(final_A0_1 / initial_conditions[0]))
+            Re_mu_1 = np.maximum(0, Re_mu_1)
+            Re_mu_grid_1[i, j] = Re_mu_1
+
+            sol_2 = solve_ivp(floquet_rhs_2, (0, 10 * T), initial_conditions, args=(k, m_gamma_prime), t_eval=t_eval, method='RK45')
+            final_A0_2 = sol_2.y[0][-1]
+            Re_mu_2 = (1 / (10 * T)) * np.log(np.abs(final_A0_2 / initial_conditions[0]))
+            Re_mu_2 = np.maximum(0, Re_mu_2)
+            Re_mu_grid_2[i, j] = Re_mu_2
+
+    k_grid, phi0_grid = np.meshgrid(k_values / m_phi, phi0_values / M)
+
+    cs1 = axs[idx, 0].contourf(k_grid, phi0_grid, Re_mu_grid_1, levels=100, cmap=cmr.ocean_r)
+    contour1 = axs[idx, 0].contour(k_grid, phi0_grid, Re_mu_grid_1, levels=[0.00001], colors='k', linewidths=0.5)
+    axs[idx, 0].clabel(contour1, inline=True, fontsize=8)
+    axs[idx, 0].set_title(f"Real part of Floquet exponent ('$A_0$'), m_gamma_prime = {m_gamma_prime}")
+    axs[idx, 0].set_xlabel('$k/m_{\phi}$')
+    axs[idx, 0].set_ylabel('$\phi_0/M$')
+  
+
+    cs2 = axs[idx, 1].contourf(k_grid, phi0_grid, Re_mu_grid_2, levels=100, cmap=cmr.ocean_r)
+    contour2 = axs[idx, 1].contour(k_grid, phi0_grid, Re_mu_grid_2, levels=[0.00001], colors='k', linewidths=0.5)
+    axs[idx, 1].clabel(contour2, inline=True, fontsize=8)
+    axs[idx, 1].set_title(f"Real part of Floquet exponent ('$A_+-$'), m_gamma_prime = {m_gamma_prime}")
+    axs[idx, 1].set_xlabel('$k/m_{\phi}$')
+    axs[idx, 1].set_ylabel('$\phi_0/M$')
+ 
+
+plt.tight_layout()
+plt.show()
